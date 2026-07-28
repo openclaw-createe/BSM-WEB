@@ -142,3 +142,80 @@
     color: var(--color-foreground);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Barber Shop Machine — brand overrides
+   ═══════════════════════════════════════════════════════════ */
+
+html {
+  scroll-behavior: smooth;
+  background-color: #080808;
+}
+
+body {
+  background-color: #080808;
+  color: #f5f0e8;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 0; height: 0; }
+
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-gold {
+  background: rgba(201, 168, 76, 0.08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+}
+
+.btn-glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f0e8;
+  transition: all 0.25s ease;
+}
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, #c9a84c 0%, #e8c96a 50%, #c9a84c 100%);
+  color: #080808;
+  font-weight: 600;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 30px rgba(201, 168, 76, 0.25);
+}
+.btn-gold:hover {
+  box-shadow: 0 0 50px rgba(201, 168, 76, 0.45);
+  transform: translateY(-1px);
+}
+
+.section-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: #c9a84c;
+}
+
+.display-serif { font-family: 'Playfair Display', serif; }
+.star-gold { color: #c9a84c; }
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
+  opacity: 0.6;
+  cursor: pointer;
+}
+input[type="date"] { color-scheme: dark; }
