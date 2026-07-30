@@ -162,11 +162,13 @@ export async function createCalendarEvent(input: CalendarEventInput): Promise<st
 
 export async function deleteCalendarEvent(eventId: string) {
   try {
-    await fetch(
-      `${GATEWAY_URL}/calendars/${encodeURIComponent(calendarId())}/events/${encodeURIComponent(eventId)}`,
-      { method: "DELETE", headers: gatewayHeaders() },
+    await gatewayRequest(
+      `/calendars/${encodeURIComponent(calendarId())}/events/${encodeURIComponent(eventId)}`,
+      { method: "DELETE" },
+      8_000,
     );
   } catch (error) {
     console.error("Failed to roll back calendar event", error);
   }
 }
+
