@@ -5,6 +5,18 @@ import { createBooking, getAvailability } from "@/lib/bookings.functions";
 import img3550 from "@/assets/img-3550.jpg";
 import img3553 from "@/assets/img-3553.jpg";
 
+/** Never let a hanging server call leave the UI stuck in a loading state. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out")), ms),
+    ),
+  ]);
+}
+
+
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
