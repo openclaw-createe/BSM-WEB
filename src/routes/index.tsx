@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { SERVICES, TIME_SLOTS, type Service } from "@/lib/booking-shared";
+import { createBooking, getAvailability } from "@/lib/bookings.functions";
 import img3550 from "@/assets/img-3550.jpg";
 import img3553 from "@/assets/img-3553.jpg";
 
@@ -31,13 +33,6 @@ export const Route = createFileRoute("/")({
 });
 
 // ─── Types ───────────────────────────────────────────────
-interface Service {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  duration: number;
-}
 interface Review {
   name: string;
   rating: number;
@@ -47,28 +42,11 @@ interface Review {
 }
 
 // ─── Data ────────────────────────────────────────────────
-const SERVICES: Service[] = [
-  { id: "classic", name: "Classic Cut", description: "Precision scissor cut & finish", price: 35, duration: 45 },
-  { id: "fade", name: "Skin Fade", description: "Zero to length gradient fade", price: 40, duration: 45 },
-  { id: "lineup", name: "Shape & Lineup", description: "Edge-up & beard line definition", price: 30, duration: 30 },
-  { id: "beard", name: "Beard Sculpt", description: "Hot towel, trim & shape", price: 30, duration: 30 },
-  { id: "combo", name: "Cut + Beard", description: "Full service — cut & beard combo", price: 60, duration: 75 },
-  { id: "kids", name: "Kids Cut (12 & under)", description: "Gentle, precise cut for kids", price: 25, duration: 30 },
-];
-
 const REVIEWS: Review[] = [
   { name: "Marcus T.", rating: 5, text: "Every time I walk out of BSM I feel like a new person. Clean cuts, great energy, and they always take their time.", date: "July 2025", avatar: "M" },
   { name: "Jordan R.", rating: 5, text: "Clean shop, professional vibes, and they always have me looking fresh. Highly recommend.", date: "June 2025", avatar: "J" },
   { name: "Carlos V.", rating: 5, text: "Booked online and it was smooth as it gets. Walked in, zero wait, walked out looking like money.", date: "June 2025", avatar: "C" },
   { name: "Devon W.", rating: 5, text: "The beard sculpt alone is worth the trip. These guys take their craft seriously. Won't go anywhere else.", date: "May 2025", avatar: "D" },
-];
-
-const TIME_SLOTS = [
-  "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM",
-  "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
-  "1:00 PM", "2:00 PM", "2:30 PM", "3:00 PM",
-  "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM",
-  "5:30 PM", "6:00 PM",
 ];
 
 const BUSINESS = {
@@ -102,28 +80,6 @@ function getNext14Days() {
     days.push({ label, short, value, dayName });
   }
   return days;
-}
-
-function buildGoogleCalendarUrl(service: Service, date: string, time: string) {
-  const [mon, day] = date.split("-").slice(1);
-  const year = date.split("-")[0];
-  const timeStr = time.replace(" ", "").toUpperCase();
-  const [hourStr, minPart] = timeStr.split(":");
-  const minutes = minPart.slice(0, 2);
-  const ampm = minPart.slice(2);
-  let hour = parseInt(hourStr);
-  if (ampm === "PM" && hour !== 12) hour += 12;
-  if (ampm === "AM" && hour === 12) hour = 0;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const startDt = `${year}${pad(parseInt(mon))}${pad(parseInt(day))}T${pad(hour)}${minutes}00`;
-  const endHour = hour + Math.floor(service.duration / 60);
-  const endMin = (parseInt(minutes) + (service.duration % 60)) % 60;
-  const endHourFinal = endHour + Math.floor((parseInt(minutes) + (service.duration % 60)) / 60);
-  const endDt = `${year}${pad(parseInt(mon))}${pad(parseInt(day))}T${pad(endHourFinal)}${pad(endMin)}00`;
-  const title = encodeURIComponent(`BSM — ${service.name}`);
-  const details = encodeURIComponent(`Barber Shop Machine appointment.\nService: ${service.name} ($${service.price})\nAddress: ${BUSINESS.address}\nPhone: ${BUSINESS.phone}`);
-  const location = encodeURIComponent(BUSINESS.address);
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDt}/${endDt}&details=${details}&location=${location}`;
 }
 
 // ─── Sub-components ──────────────────────────────────────
