@@ -7,6 +7,7 @@ import {
   createCalendarEvent,
   deleteCalendarEvent,
   fetchBusyIntervals,
+  fetchEventStatus,
 } from "./booking.server";
 
 export type BookingResult =
@@ -21,6 +22,13 @@ export type BookingResult =
     }
   | { ok: false; code: string; message: string };
 
+export type AvailabilityResult = {
+  date: string;
+  takenSlots: string[];
+  calendarSynced: boolean;
+  warning?: string;
+};
+
 const availabilitySchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 
 const bookingSchema = z.object({
@@ -33,44 +41,97 @@ const bookingSchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
+type ActiveRow = { id: string; booking_time: string; google_event_id: string | null };
+
+/**
+ * Releases DB rows whose Google Calendar event was cancelled/deleted directly
+ * in the calendar, and returns the slots that are still genuinely taken.
+ */
+async function reconcileRows(
+  supabaseAdmin: Awaited<
+    typeof import("@/integrations/supabase/client.server")
+  >["supabaseAdmin"],
+  rows: ActiveRow[],
+): Promise<{ taken: Set<string>; releasedIds: string[] }> {
+  const taken = new Set<string>();
+  const releasedIds: string[] = [];
+
+  const statuses = await Promise.all(
+    rows.map(async (row) =>
+      row.google_event_id ? await fetchEventStatus(row.google_event_id) : ("active" as const),
+    ),
+  );
+
+  rows.forEach((row, i) => {
+    if (statuses[i] === "cancelled") releasedIds.push(row.id);
+    else taken.add(row.booking_time);
+  });
+
+  if (releasedIds.length) {
+    const { error } = await supabaseAdmin
+      .from("bookings")
+      .update({ status: "cancelled" })
+      .in("id", releasedIds);
+    if (error) console.error("Failed to release cancelled bookings", error);
+  }
+
+  return { taken, releasedIds };
+}
+
 export const getAvailability = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => availabilitySchema.parse(data))
-  .handler(async ({ data }) => {
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: rows, error } = await supabaseAdmin
-        .from("bookings")
-        .select("booking_time")
-        .eq("booking_date", data.date)
-        .neq("status", "cancelled");
-      if (error) throw new BookingError("db_error", "Could not load availability.");
+  .handler(async ({ data }): Promise<AvailabilityResult> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-      const taken = new Set((rows ?? []).map((r: { booking_time: string }) => r.booking_time));
+    const { data: rows, error } = await supabaseAdmin
+      .from("bookings")
+      .select("id, booking_time, google_event_id")
+      .eq("booking_date", data.date)
+      .neq("status", "cancelled");
 
-      try {
-        const busy = await fetchBusyIntervals(data.date);
-        for (const slot of TIME_SLOTS) {
-          const startLocal = localDateTime(data.date, slot);
-          if (!startLocal) continue;
-          const start = zonedToUtc(startLocal).getTime();
-          const end = start + 30 * 60_000;
-          if (
-            busy.some((b) => start < new Date(b.end).getTime() && end > new Date(b.start).getTime())
-          ) {
-            taken.add(slot);
-          }
-        }
-      } catch (error) {
-        // Calendar unreachable: fall back to database-only availability.
-        console.error("freeBusy lookup failed", error);
-      }
-
-      return { date: data.date, takenSlots: [...taken] };
-    } catch (error) {
-      console.error("Availability lookup failed", error);
-      return { date: data.date, takenSlots: [] as string[] };
+    if (error) {
+      console.error("Availability DB lookup failed", error);
+      // Never claim everything is free: that leads to failed confirmations.
+      return {
+        date: data.date,
+        takenSlots: [...TIME_SLOTS],
+        calendarSynced: false,
+        warning: "We couldn't load availability right now. Please try again in a moment.",
+      };
     }
+
+    const { taken } = await reconcileRows(supabaseAdmin, (rows ?? []) as ActiveRow[]);
+
+    let calendarSynced = true;
+    try {
+      const busy = await fetchBusyIntervals(data.date);
+      for (const slot of TIME_SLOTS) {
+        const startLocal = localDateTime(data.date, slot);
+        if (!startLocal) continue;
+        const start = zonedToUtc(startLocal).getTime();
+        const end = start + 30 * 60_000;
+        if (
+          busy.some((b) => start < new Date(b.end).getTime() && end > new Date(b.start).getTime())
+        ) {
+          taken.add(slot);
+        }
+      }
+    } catch (calendarError) {
+      // Calendar unreachable: fall back to database-only availability.
+      console.error("freeBusy lookup failed", calendarError);
+      calendarSynced = false;
+    }
+
+    return {
+      date: data.date,
+      takenSlots: [...taken],
+      calendarSynced,
+      warning: calendarSynced
+        ? undefined
+        : "Live calendar sync is temporarily unavailable — some times may already be booked.",
+    };
   });
+
 
 export const createBooking = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => bookingSchema.parse(data))
