@@ -323,11 +323,17 @@ function Booking({ initialService }: { initialService?: Service }) {
     let cancelled = false;
     setLoadingSlots(true);
     setTaken([]);
-    getAvailability({ data: { date: selectedDate } })
+    setError("");
+    withTimeout(getAvailability({ data: { date: selectedDate } }), 30_000)
       .then((res) => {
-        if (!cancelled) setTaken(res.takenSlots);
+        if (cancelled) return;
+        setTaken(res.takenSlots);
+        if (res.warning) setError(res.warning);
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled)
+          setError("We couldn't load availability. Please check your connection and try again.");
+      })
       .finally(() => {
         if (!cancelled) setLoadingSlots(false);
       });
@@ -346,16 +352,19 @@ function Booking({ initialService }: { initialService?: Service }) {
 
     setSubmitting(true);
     try {
-      const res = await createBooking({
-        data: {
-          serviceId: selectedService.id,
-          date: selectedDate,
-          time: selectedTime,
-          name: name.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-        },
-      });
+      const res = await withTimeout(
+        createBooking({
+          data: {
+            serviceId: selectedService.id,
+            date: selectedDate,
+            time: selectedTime,
+            name: name.trim(),
+            email: email.trim(),
+            phone: phone.trim(),
+          },
+        }),
+        40_000,
+      );
       if (!res.ok) {
         setError(res.message);
         if (res.code === "slot_taken") {
@@ -367,11 +376,14 @@ function Booking({ initialService }: { initialService?: Service }) {
       }
       setDone(true);
     } catch {
-      setError("We couldn't reach the booking system. Please try again in a moment.");
+      setError(
+        "The booking system took too long to respond. Your appointment was not confirmed — please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
   };
+
 
   const reset = () => {
     setStep(0);
