@@ -33,8 +33,27 @@ function calendarId() {
   return process.env.BSM_CALENDAR_ID || SHOP.email;
 }
 
+const GATEWAY_TIMEOUT_MS = 12_000;
+
+async function gatewayRequest(path: string, init: RequestInit, timeoutMs = GATEWAY_TIMEOUT_MS) {
+  try {
+    return await fetch(`${GATEWAY_URL}${path}`, {
+      ...init,
+      headers: gatewayHeaders(),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof BookingError) throw error;
+    console.error(`Google Calendar gateway request failed for ${path}`, error);
+    throw new BookingError(
+      "calendar_error",
+      "We couldn't reach the shop calendar. Your appointment was not booked — please try again.",
+    );
+  }
+}
+
 async function gatewayFetch(path: string, init: RequestInit) {
-  const res = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers: gatewayHeaders() });
+  const res = await gatewayRequest(path, init);
   if (!res.ok) {
     const body = await res.text();
     console.error(`Google Calendar gateway failed [${res.status}]: ${body}`);
@@ -45,6 +64,34 @@ async function gatewayFetch(path: string, init: RequestInit) {
   }
   return res.json() as Promise<Record<string, unknown>>;
 }
+
+/**
+ * Status of a previously created event, used to release slots that were
+ * cancelled/deleted directly in Google Calendar.
+ */
+export async function fetchEventStatus(
+  eventId: string,
+): Promise<"active" | "cancelled" | "unknown"> {
+  try {
+    const res = await gatewayRequest(
+      `/calendars/${encodeURIComponent(calendarId())}/events/${encodeURIComponent(eventId)}`,
+      { method: "GET" },
+      8_000,
+    );
+    if (res.status === 404 || res.status === 410) return "cancelled";
+    if (!res.ok) {
+      console.error(`Event status lookup failed [${res.status}]: ${await res.text()}`);
+      return "unknown";
+    }
+    const data = (await res.json()) as { status?: string };
+    return data.status === "cancelled" ? "cancelled" : "active";
+  } catch (error) {
+    console.error("Event status lookup error", error);
+    return "unknown";
+  }
+}
+
+
 
 /** Busy intervals (UTC ISO strings) for a given day, straight from Google Calendar. */
 export async function fetchBusyIntervals(date: string): Promise<{ start: string; end: string }[]> {
@@ -115,11 +162,13 @@ export async function createCalendarEvent(input: CalendarEventInput): Promise<st
 
 export async function deleteCalendarEvent(eventId: string) {
   try {
-    await fetch(
-      `${GATEWAY_URL}/calendars/${encodeURIComponent(calendarId())}/events/${encodeURIComponent(eventId)}`,
-      { method: "DELETE", headers: gatewayHeaders() },
+    await gatewayRequest(
+      `/calendars/${encodeURIComponent(calendarId())}/events/${encodeURIComponent(eventId)}`,
+      { method: "DELETE" },
+      8_000,
     );
   } catch (error) {
     console.error("Failed to roll back calendar event", error);
   }
 }
+
