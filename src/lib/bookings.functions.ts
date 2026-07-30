@@ -158,28 +158,50 @@ export const createBooking = createServerFn({ method: "POST" })
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
       // Claim the slot first: the partial unique index makes double booking impossible.
-      const { data: row, error } = await supabaseAdmin
-        .from("bookings")
-        .insert({
-          customer_name: data.name,
-          customer_email: data.email,
-          customer_phone: data.phone,
-          service_id: service.id,
-          service_name: service.name,
-          service_price: service.price,
-          service_duration: service.duration,
-          booking_date: data.date,
-          booking_time: data.time,
-          starts_at: startsAt.toISOString(),
-          ends_at: endsAt.toISOString(),
-          status: "pending",
-          notes: data.notes ?? null,
-        })
-        .select("id")
-        .single();
+      const insertRow = () =>
+        supabaseAdmin
+          .from("bookings")
+          .insert({
+            customer_name: data.name,
+            customer_email: data.email,
+            customer_phone: data.phone,
+            service_id: service.id,
+            service_name: service.name,
+            service_price: service.price,
+            service_duration: service.duration,
+            booking_date: data.date,
+            booking_time: data.time,
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            status: "pending",
+            notes: data.notes ?? null,
+          })
+          .select("id")
+          .single();
 
-      if (error) {
-        if (error.code === "23505") {
+      let { data: row, error } = await insertRow();
+
+      if (error?.code === "23505") {
+        // The blocking row may belong to an appointment cancelled directly in
+        // Google Calendar — release it and retry once.
+        const { data: conflicting } = await supabaseAdmin
+          .from("bookings")
+          .select("id, booking_time, google_event_id")
+          .eq("booking_date", data.date)
+          .eq("booking_time", data.time)
+          .neq("status", "cancelled");
+
+        const { releasedIds } = await reconcileRows(
+          supabaseAdmin,
+          (conflicting ?? []) as ActiveRow[],
+        );
+        if (releasedIds.length) {
+          ({ data: row, error } = await insertRow());
+        }
+      }
+
+      if (error || !row) {
+        if (error?.code === "23505") {
           throw new BookingError(
             "slot_taken",
             "Sorry, that time was just booked. Please choose another slot.",
@@ -188,6 +210,7 @@ export const createBooking = createServerFn({ method: "POST" })
         console.error("Booking insert failed", error);
         throw new BookingError("db_error", "We couldn't save your appointment. Please try again.");
       }
+
 
       let eventId = "";
       try {
