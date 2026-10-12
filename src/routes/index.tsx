@@ -46,6 +46,7 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(siteQuery),
   component: Index,
 });
 
