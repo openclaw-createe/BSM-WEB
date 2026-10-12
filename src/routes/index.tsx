@@ -1,8 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { SERVICES, TIME_SLOTS, type Service } from "@/lib/booking-shared";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { TIME_SLOTS, type Service } from "@/lib/booking-shared";
 import { createBooking, getAvailability } from "@/lib/bookings.functions";
 import img3550 from "@/assets/img-3550.jpg";
+import { DEFAULT_CONTENT, encodeAddress, phoneRaw, type GalleryPhoto, type SiteContent } from "@/lib/site-content";
+import { getSiteContent } from "@/lib/site.functions";
+
+const siteQuery = queryOptions({ queryKey: ["site-content"], queryFn: () => getSiteContent() });
 import img3553 from "@/assets/img-3553.jpg";
 
 /** Never let a hanging server call leave the UI stuck in a loading state. */
@@ -41,6 +46,7 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(siteQuery),
   component: Index,
 });
 
@@ -85,22 +91,21 @@ const REVIEWS: Review[] = [
   },
 ];
 
-const BUSINESS = {
-  name: "BARBER SHOP MACHINE",
-  phone: "(631) 394-8763",
-  phoneRaw: "+16313948763",
-  address: "12250 Main Rd, Mattituck, NY 11952",
-  addressEncoded: "12250+Main+Rd+Mattituck+NY+11952",
-  hours: [
-    { day: "Monday", time: "10:00 AM – 8:30 PM" },
-    { day: "Tuesday", time: "10:00 AM – 8:30 PM" },
-    { day: "Wednesday", time: "10:00 AM – 8:30 PM" },
-    { day: "Thursday", time: "10:00 AM – 8:30 PM" },
-    { day: "Friday", time: "10:00 AM – 8:30 PM" },
-    { day: "Saturday", time: "9:00 AM – 8:30 PM" },
-    { day: "Sunday", time: "10:00 AM – 5:00 PM" },
-  ],
-};
+const SiteCtx = createContext<{ content: SiteContent; photos: GalleryPhoto[] }>({
+  content: DEFAULT_CONTENT,
+  photos: [],
+});
+const useSite = () => useContext(SiteCtx);
+function useBiz() {
+  const { content } = useSite();
+  const b = content.business;
+  return {
+    ...b,
+    phoneRaw: phoneRaw(b.phone),
+    addressEncoded: encodeAddress(b.address),
+    hours: content.hours,
+  };
+}
 
 // ─── Helpers ─────────────────────────────────────────────
 function getNext14Days() {
@@ -201,6 +206,8 @@ function Nav({ onBook }: { onBook: () => void }) {
 }
 
 function Hero({ onBook }: { onBook: () => void }) {
+  const biz = useBiz();
+  const { content } = useSite();
   return (
     <section className="relative min-h-screen flex flex-col justify-end overflow-hidden">
       <div className="absolute inset-0">
@@ -224,35 +231,31 @@ function Hero({ onBook }: { onBook: () => void }) {
       </div>
       <div className="relative z-10 max-w-lg mx-auto w-full px-6 pb-16 pt-32">
         <h1 className="display-serif text-6xl font-black text-white leading-[1.0] mb-3 tracking-tight">
-          Barber Shop
+          {content.hero.titleLine1}
           <br />
           <em className="not-italic" style={{ color: "#c9a84c" }}>
-            Machine
+            {content.hero.titleLine2}
           </em>
         </h1>
         <p className="text-white/50 text-sm font-light tracking-widest uppercase mb-8">
-          Mattituck, New York
+          {content.hero.subtitle}
         </p>
         <div className="flex flex-col gap-3">
           <button
             onClick={onBook}
             className="btn-gold w-full py-4 rounded-2xl text-sm font-semibold tracking-wide"
           >
-            Book Your Appointment
+            {content.hero.bookButton}
           </button>
           <a
-            href={`tel:${BUSINESS.phoneRaw}`}
+            href={`tel:${biz.phoneRaw}`}
             className="btn-glass w-full py-4 rounded-2xl text-sm font-medium tracking-wide text-center"
           >
-            {BUSINESS.phone}
+            {biz.phone}
           </a>
         </div>
         <div className="mt-10 grid grid-cols-3 gap-3">
-          {[
-            { val: "6+", label: "Years" },
-            { val: "4.9★", label: "Rating" },
-            { val: "100%", label: "Fresh" },
-          ].map(({ val, label }) => (
+          {content.stats.map(({ val, label }) => (
             <div key={label} className="glass rounded-2xl p-4 text-center">
               <p className="display-serif text-2xl font-bold text-white">{val}</p>
               <p className="text-white/40 text-[10px] tracking-widest uppercase mt-0.5">{label}</p>
@@ -265,6 +268,7 @@ function Hero({ onBook }: { onBook: () => void }) {
 }
 
 function Services({ onBook }: { onBook: (service?: Service) => void }) {
+  const SERVICES = useSite().content.services;
   return (
     <section className="relative py-20 px-5 max-w-lg mx-auto">
       <div className="mb-8">
@@ -309,6 +313,7 @@ function Services({ onBook }: { onBook: (service?: Service) => void }) {
 }
 
 function Booking({ initialService }: { initialService?: Service }) {
+  const SERVICES = useSite().content.services;
   const [step, setStep] = useState(initialService ? 1 : 0);
   const [selectedService, setSelectedService] = useState<Service | undefined>(initialService);
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -775,7 +780,7 @@ function Reviews() {
   );
 }
 
-const GALLERY = [
+const DEFAULT_GALLERY = [
   { src: img3550, alt: "Precision fade in progress" },
   {
     src: "https://images.unsplash.com/photo-1630435664010-20cbd1d7bb6d?w=800&h=800&fit=crop&auto=format&q=80",
@@ -792,6 +797,8 @@ const GALLERY = [
 ];
 
 function Gallery() {
+  const { photos } = useSite();
+  const GALLERY = photos.length ? photos.map((p) => ({ src: p.url, alt: p.alt })) : DEFAULT_GALLERY;
   return (
     <section style={{ background: "#080808" }} className="py-16 px-5">
       <div className="max-w-lg mx-auto">
@@ -812,7 +819,7 @@ function Gallery() {
           />
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {GALLERY.slice(1).map((photo, i) => (
+          {GALLERY.slice(1).map((p) => p).filter(Boolean).map((photo, i) => (
             <div
               key={i}
               className="rounded-2xl overflow-hidden"
@@ -824,7 +831,7 @@ function Gallery() {
                 loading="lazy"
                 className="w-full h-full object-cover"
                 style={{
-                  objectPosition: i === 0 ? "center 15%" : i === 1 ? "center 25%" : "center 10%",
+                  objectPosition: "center 20%",
                 }}
               />
             </div>
@@ -836,8 +843,10 @@ function Gallery() {
 }
 
 function Location() {
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${BUSINESS.addressEncoded}`;
-  const appleMapsUrl = `https://maps.apple.com/?q=${BUSINESS.addressEncoded}`;
+  const biz = useBiz();
+  const { content } = useSite();
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${biz.addressEncoded}`;
+  const appleMapsUrl = `https://maps.apple.com/?q=${biz.addressEncoded}`;
   return (
     <section className="relative py-20 px-5 max-w-lg mx-auto">
       <div className="mb-8">
@@ -861,7 +870,7 @@ function Location() {
           loading="lazy"
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
-          src={`https://maps.google.com/maps?q=${BUSINESS.addressEncoded}&output=embed`}
+          src={`https://maps.google.com/maps?q=${biz.addressEncoded}&output=embed`}
         />
         <div
           className="absolute inset-0 pointer-events-none rounded-3xl"
@@ -899,7 +908,7 @@ function Location() {
           </div>
           <div>
             <p className="text-white/40 text-[10px] tracking-widest uppercase mb-1">Address</p>
-            <p className="text-white text-sm leading-snug">{BUSINESS.address}</p>
+            <p className="text-white text-sm leading-snug">{biz.address}</p>
           </div>
         </div>
         <div className="flex items-start gap-3">
@@ -928,11 +937,11 @@ function Location() {
           <div>
             <p className="text-white/40 text-[10px] tracking-widest uppercase mb-1">Phone</p>
             <a
-              href={`tel:${BUSINESS.phoneRaw}`}
+              href={`tel:${biz.phoneRaw}`}
               className="text-white text-sm"
               style={{ color: "#c9a84c" }}
             >
-              {BUSINESS.phone}
+              {biz.phone}
             </a>
           </div>
         </div>
@@ -962,7 +971,7 @@ function Location() {
           <div className="flex-1">
             <p className="text-white/40 text-[10px] tracking-widest uppercase mb-2">Hours</p>
             <div className="space-y-1.5">
-              {BUSINESS.hours.map(({ day, time }) => (
+              {biz.hours.map(({ day, time }) => (
                 <div key={day} className="flex justify-between items-center">
                   <span className="text-white/60 text-xs">{day}</span>
                   <span className="text-white text-xs font-medium">{time}</span>
@@ -1016,6 +1025,8 @@ function Location() {
 }
 
 function Footer({ onBook }: { onBook: () => void }) {
+  const biz = useBiz();
+  const { content } = useSite();
   return (
     <footer
       className="relative border-t overflow-hidden"
@@ -1034,7 +1045,7 @@ function Footer({ onBook }: { onBook: () => void }) {
             <Logo size="lg" />
           </div>
           <h3 className="display-serif text-2xl font-bold text-white mb-1">Barber Shop Machine</h3>
-          <p className="text-white/40 text-sm">Mattituck, New York</p>
+          <p className="text-white/40 text-sm">{content.footer.tagline}</p>
         </div>
         <button
           onClick={onBook}
@@ -1043,7 +1054,7 @@ function Footer({ onBook }: { onBook: () => void }) {
           Book Your Appointment
         </button>
         <div className="grid grid-cols-3 gap-4 mb-8 text-center">
-          <a href={`tel:${BUSINESS.phoneRaw}`} className="flex flex-col items-center gap-2 group">
+          <a href={`tel:${biz.phoneRaw}`} className="flex flex-col items-center gap-2 group">
             <div className="w-10 h-10 glass rounded-2xl flex items-center justify-center transition-all group-active:scale-95">
               <svg
                 className="w-4 h-4 text-white/60"
@@ -1062,7 +1073,7 @@ function Footer({ onBook }: { onBook: () => void }) {
             <span className="text-white/40 text-[10px] tracking-wide">Call Us</span>
           </a>
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${BUSINESS.addressEncoded}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${biz.addressEncoded}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex flex-col items-center gap-2 group"
@@ -1090,7 +1101,7 @@ function Footer({ onBook }: { onBook: () => void }) {
             <span className="text-white/40 text-[10px] tracking-wide">Directions</span>
           </a>
           <a
-            href="https://instagram.com"
+            href={biz.instagram}
             target="_blank"
             rel="noopener noreferrer"
             className="flex flex-col items-center gap-2 group"
@@ -1108,7 +1119,7 @@ function Footer({ onBook }: { onBook: () => void }) {
           style={{ borderColor: "rgba(255,255,255,0.06)" }}
         >
           <p className="text-white/20 text-[10px] tracking-widest uppercase">
-            © 2025 Barber Shop Machine · Mattituck, NY
+            {content.footer.copyright}
           </p>
         </div>
       </div>
@@ -1117,6 +1128,7 @@ function Footer({ onBook }: { onBook: () => void }) {
 }
 
 function Index() {
+  const { data: site } = useSuspenseQuery(siteQuery);
   const [bookingService, setBookingService] = useState<Service | undefined>();
 
   const scrollToBooking = (service?: Service) => {
@@ -1128,6 +1140,7 @@ function Index() {
   };
 
   return (
+    <SiteCtx.Provider value={site}>
     <div style={{ background: "#080808", minHeight: "100vh" }}>
       <Nav onBook={() => scrollToBooking()} />
       <Hero onBook={() => scrollToBooking()} />
@@ -1138,5 +1151,6 @@ function Index() {
       <Location />
       <Footer onBook={() => scrollToBooking()} />
     </div>
+    </SiteCtx.Provider>
   );
 }
