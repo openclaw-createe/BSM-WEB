@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { SERVICES, TIME_SLOTS, localDateTime, zonedToUtc } from "./booking-shared";
+import { TIME_SLOTS, localDateTime, zonedToUtc } from "./booking-shared";
+import { mergeContent } from "./site-content";
 import {
   BookingError,
   createCalendarEvent,
@@ -137,7 +138,13 @@ export const createBooking = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => bookingSchema.parse(data))
   .handler(async ({ data }): Promise<BookingResult> => {
     try {
-      const service = SERVICES.find((s) => s.id === data.serviceId);
+      const { supabaseAdmin: sbSettings } = await import("@/integrations/supabase/client.server");
+      const { data: settings } = await sbSettings
+        .from("site_settings")
+        .select("content")
+        .eq("id", 1)
+        .maybeSingle();
+      const service = mergeContent(settings?.content).services.find((s) => s.id === data.serviceId);
       if (!service) throw new BookingError("invalid_service", "That service is not available.");
       if (!TIME_SLOTS.includes(data.time))
         throw new BookingError("invalid_time", "That time slot is not valid.");
