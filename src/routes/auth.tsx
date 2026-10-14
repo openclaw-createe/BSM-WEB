@@ -38,6 +38,7 @@ function AuthPage() {
     setError("");
     const res = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: `${window.location.origin}/auth`,
+      extraParams: { prompt: "select_account", login_hint: "info@barbershopmachine.com" },
     });
     if (res.error) {
       setError("No se pudo iniciar sesión. Inténtalo de nuevo.");
