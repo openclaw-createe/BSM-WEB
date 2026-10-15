@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { TIME_SLOTS, localDateTime, zonedToUtc } from "./booking-shared";
+import { localDateTime, slotsForDate, zonedToUtc } from "./booking-shared";
 import { mergeContent } from "./site-content";
 import {
   BookingError,
@@ -95,18 +95,25 @@ export const getAvailability = createServerFn({ method: "POST" })
       // Never claim everything is free: that leads to failed confirmations.
       return {
         date: data.date,
-        takenSlots: [...TIME_SLOTS],
+        takenSlots: Array.from({ length: 48 }, (_, i) => `${(Math.floor(i / 2) % 12) || 12}:${i % 2 ? "30" : "00"} ${i < 24 ? "AM" : "PM"}`),
         calendarSynced: false,
         warning: "We couldn't load availability right now. Please try again in a moment.",
       };
     }
+
+    const { data: settings } = await supabaseAdmin
+      .from("site_settings")
+      .select("content")
+      .eq("id", 1)
+      .maybeSingle();
+    const daySlots = slotsForDate(data.date, mergeContent(settings?.content).hours);
 
     const { taken } = await reconcileRows(supabaseAdmin, (rows ?? []) as ActiveRow[]);
 
     let calendarSynced = true;
     try {
       const busy = await fetchBusyIntervals(data.date);
-      for (const slot of TIME_SLOTS) {
+      for (const slot of daySlots) {
         const startLocal = localDateTime(data.date, slot);
         if (!startLocal) continue;
         const start = zonedToUtc(startLocal).getTime();
@@ -144,9 +151,10 @@ export const createBooking = createServerFn({ method: "POST" })
         .select("content")
         .eq("id", 1)
         .maybeSingle();
-      const service = mergeContent(settings?.content).services.find((s) => s.id === data.serviceId);
+      const merged = mergeContent(settings?.content);
+      const service = merged.services.find((s) => s.id === data.serviceId);
       if (!service) throw new BookingError("invalid_service", "That service is not available.");
-      if (!TIME_SLOTS.includes(data.time))
+      if (!slotsForDate(data.date, merged.hours).includes(data.time))
         throw new BookingError("invalid_time", "That time slot is not valid.");
 
       const startLocal = localDateTime(data.date, data.time);

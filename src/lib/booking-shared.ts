@@ -79,3 +79,30 @@ export function formatFriendlyDate(date: string): string {
     timeZone: "UTC",
   });
 }
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function fmtSlot(total: number): string {
+  const h24 = Math.floor(total / 60);
+  const m = total % 60;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${pad(m)} ${ampm}`;
+}
+
+/** Bookable 30-min start times for a date, based on the shop's opening hours. */
+export function slotsForDate(date: string, hours: { day: string; time: string }[]): string[] {
+  const dayName = WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()];
+  const row = hours.find((h) => h.day.trim().toLowerCase() === dayName.toLowerCase());
+  if (!row) return [];
+  const parts = row.time.match(/\d{1,2}:\d{2}\s*(?:AM|PM)/gi);
+  if (!parts || parts.length < 2) return []; // "Closed" or unparseable
+  const open = parseSlot(parts[0]);
+  const close = parseSlot(parts[1]);
+  if (!open || !close) return [];
+  const start = open.hour * 60 + open.minute;
+  const end = close.hour * 60 + close.minute;
+  const slots: string[] = [];
+  for (let t = start; t + 30 <= end; t += 30) slots.push(fmtSlot(t));
+  return slots;
+}
