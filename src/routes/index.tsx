@@ -326,6 +326,7 @@ function Booking({ initialService }: { initialService?: Service }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [done, setDone] = useState(false);
+  const [calendarSynced, setCalendarSynced] = useState(false);
   const days = getNext14Days();
   const { content: siteContent } = useSite();
   const daySlots = selectedDate ? slotsForDate(selectedDate, siteContent.hours) : [];
@@ -341,7 +342,7 @@ function Booking({ initialService }: { initialService?: Service }) {
     if (!selectedDate) return;
     let cancelled = false;
     setLoadingSlots(true);
-    setTaken([]);
+    setTaken(daySlots);
     setError("");
     withTimeout(getAvailability({ data: { date: selectedDate } }), 30_000)
       .then((res) => {
@@ -393,6 +394,7 @@ function Booking({ initialService }: { initialService?: Service }) {
         }
         return;
       }
+      setCalendarSynced(res.calendarSynced);
       setDone(true);
     } catch {
       setError(
@@ -455,7 +457,7 @@ function Booking({ initialService }: { initialService?: Service }) {
               {selectedService?.name} · {selectedDate} · {selectedTime}
             </p>
             <p className="text-white/30 text-xs mb-6">
-              A confirmation email is on its way to {email}.
+              {calendarSynced ? `A calendar invitation is on its way to ${email}.` : "Your appointment has been saved. Please keep these details for your visit."}
             </p>
             <button onClick={reset} className="btn-glass px-6 py-3 rounded-2xl text-sm font-medium">
               Book Another
@@ -691,7 +693,7 @@ function Booking({ initialService }: { initialService?: Service }) {
                   {submitting ? "Confirming…" : "Confirm Appointment"}
                 </button>
                 <p className="text-white/25 text-[10px] text-center mt-3">
-                  Your spot is reserved instantly and you'll get a confirmation email.
+                  Your appointment details appear here once your booking is saved.
                 </p>
               </div>
             )}
