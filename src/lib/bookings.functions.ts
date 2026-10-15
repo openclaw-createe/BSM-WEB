@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { TIME_SLOTS, localDateTime, slotsForDate, zonedToUtc } from "./booking-shared";
+import { localDateTime, slotsForDate, zonedToUtc } from "./booking-shared";
 import { mergeContent } from "./site-content";
 import {
   BookingError,
@@ -95,7 +95,7 @@ export const getAvailability = createServerFn({ method: "POST" })
       // Never claim everything is free: that leads to failed confirmations.
       return {
         date: data.date,
-        takenSlots: [...TIME_SLOTS],
+        takenSlots: Array.from({ length: 48 }, (_, i) => `${(Math.floor(i / 2) % 12) || 12}:${i % 2 ? "30" : "00"} ${i < 24 ? "AM" : "PM"}`),
         calendarSynced: false,
         warning: "We couldn't load availability right now. Please try again in a moment.",
       };
