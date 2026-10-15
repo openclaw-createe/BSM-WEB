@@ -31,7 +31,9 @@ export const getSiteContent = createServerFn({ method: "GET" }).handler(
       ]);
       let photos: GalleryPhoto[] = [];
       if (rows?.length) {
-        const { data: signed } = await sb.storage
+        // Gallery files are private; only the server signs short-lived links for listed photos.
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: signed } = await supabaseAdmin.storage
           .from("gallery")
           .createSignedUrls(
             rows.map((r) => r.storage_path),
