@@ -55,8 +55,7 @@ async function gatewayRequest(path: string, init: RequestInit, timeoutMs = GATEW
 async function gatewayFetch(path: string, init: RequestInit) {
   const res = await gatewayRequest(path, init);
   if (!res.ok) {
-    const body = await res.text();
-    console.error(`Google Calendar gateway failed [${res.status}]: ${body}`);
+    console.error(`Google Calendar gateway failed [${res.status}]`);
     throw new BookingError(
       "calendar_error",
       "We couldn't reach the shop calendar. Your appointment was not booked — please try again.",
@@ -80,7 +79,7 @@ export async function fetchEventStatus(
     );
     if (res.status === 404 || res.status === 410) return "cancelled";
     if (!res.ok) {
-      console.error(`Event status lookup failed [${res.status}]: ${await res.text()}`);
+      console.error(`Event status lookup failed [${res.status}]`);
       return "unknown";
     }
     const data = (await res.json()) as { status?: string };
@@ -90,8 +89,6 @@ export async function fetchEventStatus(
     return "unknown";
   }
 }
-
-
 
 /** Busy intervals (UTC ISO strings) for a given day, straight from Google Calendar. */
 export async function fetchBusyIntervals(date: string): Promise<{ start: string; end: string }[]> {
@@ -104,8 +101,20 @@ export async function fetchBusyIntervals(date: string): Promise<{ start: string;
       items: [{ id: calendarId() }],
     }),
   });
-  const calendars = (data.calendars ?? {}) as Record<string, { busy?: { start: string; end: string }[] }>;
-  return calendars[calendarId()]?.busy ?? [];
+  const calendars = (data.calendars ?? {}) as Record<
+    string,
+    { busy?: { start: string; end: string }[] }
+  >;
+  const calendar = calendars[calendarId()] as
+    | { busy?: { start: string; end: string }[]; errors?: unknown[] }
+    | undefined;
+  if (!calendar || calendar.errors?.length) {
+    throw new BookingError(
+      "calendar_error",
+      "We couldn't check the shop calendar. Please try again.",
+    );
+  }
+  return calendar.busy ?? [];
 }
 
 export interface CalendarEventInput {
@@ -157,7 +166,13 @@ export async function createCalendarEvent(input: CalendarEventInput): Promise<st
     },
   );
 
-  return String(event.id ?? "");
+  if (typeof event.id !== "string" || !event.id) {
+    throw new BookingError(
+      "calendar_error",
+      "We couldn't confirm your calendar appointment. Please try again.",
+    );
+  }
+  return event.id;
 }
 
 export async function deleteCalendarEvent(eventId: string) {
@@ -171,4 +186,3 @@ export async function deleteCalendarEvent(eventId: string) {
     console.error("Failed to roll back calendar event", error);
   }
 }
-

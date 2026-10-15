@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSiteContent, cancelBookingAdmin } from "@/lib/site.functions";
+import { getSiteContent, cancelBookingAdmin, listBookingsAdmin } from "@/lib/site.functions";
 import { mergeContent, type SiteContent, type GalleryPhoto } from "@/lib/site-content";
 import { formatFriendlyDate } from "@/lib/booking-shared";
 
@@ -338,14 +338,7 @@ function BookingsTab() {
   const [showPast, setShowPast] = useState(false);
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin-bookings", showPast],
-    queryFn: async () => {
-      let q = supabase.from("bookings").select("*").order("starts_at", { ascending: !showPast });
-      const now = new Date().toISOString();
-      q = showPast ? q.lt("starts_at", now) : q.gte("starts_at", now);
-      const { data, error } = await q.limit(200);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => listBookingsAdmin({ data: { showPast } }),
   });
 
   const onCancel = async (id: string) => {
