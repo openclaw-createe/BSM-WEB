@@ -15,6 +15,13 @@
       "when": 1792034862055,
       "tag": "0001_restrict_gallery_file_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792035069286,
+      "tag": "0002_restrict_site_content_reads",
+      "breakpoints": true
     }
   ]
 }
