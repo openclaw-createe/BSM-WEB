@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
-import { TIME_SLOTS, type Service } from "@/lib/booking-shared";
+import { slotsForDate, type Service } from "@/lib/booking-shared";
 import { createBooking, getAvailability } from "@/lib/bookings.functions";
 import img3550 from "@/assets/img-3550.jpg";
 import { DEFAULT_CONTENT, encodeAddress, phoneRaw, type GalleryPhoto, type SiteContent } from "@/lib/site-content";
@@ -327,6 +327,8 @@ function Booking({ initialService }: { initialService?: Service }) {
   const [error, setError] = useState<string>("");
   const [done, setDone] = useState(false);
   const days = getNext14Days();
+  const { content: siteContent } = useSite();
+  const daySlots = selectedDate ? slotsForDate(selectedDate, siteContent.hours) : [];
 
   useEffect(() => {
     if (initialService) {
@@ -577,7 +579,10 @@ function Booking({ initialService }: { initialService?: Service }) {
                   className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  {TIME_SLOTS.map((t) => {
+                  {daySlots.length === 0 && (
+                    <p className="col-span-3 text-white/40 text-xs text-center py-4">Closed this day</p>
+                  )}
+                  {daySlots.map((t) => {
                     const isTaken = taken.includes(t);
                     return (
                       <button
